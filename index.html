@@ -202,7 +202,7 @@
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
 
-    <script>
+   <script>
         const firebaseConfig = {
             apiKey: "AIzaSyB_utJ37MVmf8T-tjqXicVHiHAYtBD8CPQ",
             authDomain: "my-website-b1abf.firebaseapp.com",
@@ -299,15 +299,20 @@
                         <div class="trending-badge"><i class="fas fa-fire"></i></div>
                         <img src="${app.iconUrl}" class="app-icon mb-2" style="width:50px; height:50px;">
                         <small class="fw-bold text-truncate" style="max-width:90px">${app.name}</small>
-                        <small class="text-muted" style="font-size:0.7rem">${app.downloads||0} DL</small>
+                        <small class="text-muted" style="font-size:0.7rem">${app.downloads||0} downloaded </small>
                     </div>`;
             });
         }
 
-        // Search & Filter
+        // Search Logic (Fixed & Verified)
         document.getElementById('searchInput').addEventListener('input', (e) => {
             const term = e.target.value.toLowerCase();
-            renderApps(allApps.filter(a => a.name.toLowerCase().includes(term)));
+            if(term === "") {
+                renderApps(allApps); // খালি থাকলে সব দেখাও
+            } else {
+                const filtered = allApps.filter(a => a.name.toLowerCase().includes(term));
+                renderApps(filtered);
+            }
         });
 
         function filterCat(cat, btn) {
@@ -316,16 +321,39 @@
             renderApps(cat === 'All' ? allApps : allApps.filter(a => a.category === cat));
         }
 
-        // Open App Logic
+        // --- NAVIGATION & HISTORY LOGIC (NEW) ---
+        
+        // 1. Browser Back Button Handler
+        window.onpopstate = function(event) {
+            if (event.state && event.state.page === 'detail') {
+                // If history says detail, show detail (rare case)
+                document.getElementById('mainContainer').style.display = 'none';
+                document.getElementById('appDetailView').style.display = 'block';
+            } else {
+                // Default: Go back to Home
+                document.getElementById('mainContainer').style.display = 'block';
+                document.getElementById('appDetailView').style.display = 'none';
+                
+                // Close Image Viewer if open
+                document.getElementById('imgViewer').style.display = "none";
+                document.body.style.overflow = "auto";
+            }
+        };
+
+        // Open App Logic (Updated with History Push)
         function openApp(id) {
             currentAppId = id;
             const app = allApps.find(a => a.id === id);
             if (!app) return;
 
+            // Push History State (This fixes the back button issue)
+            window.history.pushState({page: 'detail', id: id}, null, `#app/${id}`);
+
             document.getElementById('mainContainer').style.display = 'none';
             document.getElementById('appDetailView').style.display = 'block';
             window.scrollTo(0,0);
 
+            // Populate Data
             document.getElementById('detailName').innerText = app.name;
             document.getElementById('detailVersion').innerText = app.version;
             document.getElementById('detailCat').innerText = app.category || 'App';
@@ -333,7 +361,6 @@
             document.getElementById('detailDesc').innerText = app.description || "No desc.";
             document.getElementById('detailIcon').src = app.iconUrl;
 
-            // Update Download Count
             const dlBtn = document.getElementById('detailDownloadBtn');
             dlBtn.href = app.downloadLink;
             dlBtn.onclick = () => {
@@ -341,13 +368,11 @@
                 db.collection('stats').doc('global').update({ totalDownloads: firebase.firestore.FieldValue.increment(1) });
             };
 
-            // Screenshots with ZOOM Feature (Updated)
             const ssBox = document.getElementById('detailScreenshots');
             ssBox.innerHTML = (app.screenshots||[]).map(url => 
                 `<img src="${url}" class="screenshot-img" onclick="viewImage('${url}')" style="cursor:pointer" title="Click to Zoom">`
             ).join('') || '<p class="text-muted">No screenshots available.</p>';
 
-            // Version History Logic (Matches Name)
             const vList = document.getElementById('versionList');
             const versions = allApps.filter(a => a.name === app.name && a.id !== id);
             vList.innerHTML = versions.length ? '' : '<p class="text-muted">No old versions found.</p>';
@@ -362,9 +387,10 @@
             loadReviews(id);
         }
 
+        // Show Home Logic (Updated to use History Back)
         function showHome() {
-            document.getElementById('mainContainer').style.display = 'block';
-            document.getElementById('appDetailView').style.display = 'none';
+            // Manually going back triggers the onpopstate function above
+            window.history.back();
         }
 
         // Reviews
@@ -403,26 +429,28 @@
             });
         }
 
-        // --- Image Viewer / Zoom Logic (Added) ---
+        // Image Viewer
         function viewImage(url) {
             const viewer = document.getElementById('imgViewer');
             const img = document.getElementById('fullResImage');
             
+            // Push a history state for the image viewer too! (Pro Feature)
+            window.history.pushState({page: 'image'}, null, '#view-image');
+            
             img.src = url;
-            viewer.style.display = "flex"; // Show
-            img.classList.remove('zoomed'); // Reset Zoom
-            document.body.style.overflow = "hidden"; // Block Background Scroll
+            viewer.style.display = "flex";
+            img.classList.remove('zoomed');
+            document.body.style.overflow = "hidden";
         }
 
         function closeImageView() {
-            document.getElementById('imgViewer').style.display = "none";
-            document.body.style.overflow = "auto"; // Enable Scroll
+            // Going back will trigger close via onpopstate if using back button
+            // Or if clicked manually, we force back
+            window.history.back();
         }
 
         function toggleZoom(element) {
             element.classList.toggle('zoomed');
-            
-            // Allow scrolling when zoomed
             const viewer = document.getElementById('imgViewer');
             if (element.classList.contains('zoomed')) {
                 viewer.style.display = "block";
